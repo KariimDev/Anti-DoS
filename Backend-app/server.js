@@ -1,5 +1,5 @@
 // Backend-app/server.js
-require('dotenv').config({ path: '../.env' }); 
+require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const app = express();
 const PORT = process.env.BACKEND_PORT || 4000;
@@ -15,6 +15,15 @@ app.get('/heavy', (req, res) => {
         console.log("BACKEND: heavy task executed successfully");
         res.send('HEAVY DONE');
     }, 300);
+});
+
+app.get('/api/data', (req, res) => {
+    console.log("BACKEND: Received request for /api/data");
+    res.json({
+        status: "success",
+        data: "Sensitive API Information",
+        timestamp: new Date().toISOString()
+    });
 });
 
 app.listen(PORT, () => {

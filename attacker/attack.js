@@ -2,11 +2,11 @@ const axios = require('axios');
 
 // 1. TARGET: We attack the "Bouncer" (Sentinel Shield) on port 8080.
 // We do NOT attack the actual site on 3000 directly.
-const TARGET_URL = 'http://localhost:8080';
+const TARGET_URL = 'http://localhost:8081/heavy';
 
 // 2. SPEED: How many requests per second? 
 // Start with 1 to test. Change to 20 or 50 to "Attack".
-const REQUESTS_PER_SECOND = 2; 
+const REQUESTS_PER_SECOND = 10;
 
 async function sendAttack() {
     try {

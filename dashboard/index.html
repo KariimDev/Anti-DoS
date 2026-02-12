@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTINEL // CYBER-SHIELD</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020202;
+            --surface: #0a0a0c;
+            --primary: #00f3ff;
+            --primary-glow: rgba(0, 243, 255, 0.4);
+            --secondary: #ff00ff;
+            --danger: #ff2d55;
+            --warning: #f2ff00;
+            --text-main: #e2e8f0;
+            --text-dim: #94a3b8;
+            --grid-color: rgba(0, 243, 255, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            cursor: crosshair;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Scanline Effect */
+        body::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 1000;
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px;
+            width: 100%;
+            z-index: 10;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 50px;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 20px;
+            position: relative;
+        }
+
+        header::before {
+            content: "";
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100px;
+            height: 2px;
+            background: var(--secondary);
+            animation: moveLine 4s infinite linear;
+        }
+
+        @keyframes moveLine {
+            0% {
+                left: 0%;
+                width: 100px;
+            }
+
+            50% {
+                left: 80%;
+                width: 200px;
+            }
+
+            100% {
+                left: 0%;
+                width: 100px;
+            }
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 5px;
+            color: var(--primary);
+            text-shadow: 0 0 15px var(--primary-glow);
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            font-family: 'Orbitron', sans-serif;
+            padding: 8px 24px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            border: 1px solid var(--primary);
+            position: relative;
+            background: rgba(0, 0, 0, 0.8);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .status-badge.online {
+            color: var(--primary);
+            box-shadow: 0 0 10px var(--primary-glow), inset 0 0 10px var(--primary-glow);
+        }
+
+        .status-badge.offline {
+            color: var(--danger);
+            border-color: var(--danger);
+            box-shadow: 0 0 10px rgba(255, 45, 85, 0.4);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+            height: calc(100vh - 250px);
+        }
+
+        .stats-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid #1a1a1e;
+            padding: 24px;
+            border-radius: 0;
+            position: relative;
+            overflow: hidden;
+            border-left: 4px solid var(--primary);
+        }
+
+        .card::before {
+            content: "SEC-PROTO-77";
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 8px;
+            color: #2a2a2e;
+            font-family: 'Orbitron';
+        }
+
+        .card h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            letter-spacing: 2px;
+        }
+
+        .card .value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: bold;
+            color: var(--text-main);
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .card.active .value {
+            color: var(--primary);
+            animation: pulse 2s infinite;
+        }
+
+        .log-section {
+            background: var(--surface);
+            border: 1px solid #1a1a1e;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .log-header {
+            padding: 15px 25px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid #1a1a1e;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            color: var(--primary);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .log-container {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary) transparent;
+        }
+
+        .log-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background: var(--primary);
+        }
+
+        .log-entry {
+            font-family: 'monospace';
+            font-size: 0.85rem;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 1px solid #1a1a1e;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            animation: slideIn 0.3s ease-out;
+            transition: all 0.2s;
+        }
+
+        .log-entry:hover {
+            background: rgba(0, 0, 0, 0.5);
+            border-color: #333;
+        }
+
+        .log-entry.warning {
+            border-left: 3px solid var(--warning);
+            color: var(--warning);
+            background: rgba(242, 255, 0, 0.05);
+        }
+
+        .log-entry.ban {
+            border-left: 3px solid var(--danger);
+            color: var(--danger);
+            background: rgba(255, 45, 85, 0.05);
+            font-weight: bold;
+        }
+
+        .log-entry .timestamp {
+            color: #444;
+            min-width: 80px;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.8;
+            }
+
+            50% {
+                opacity: 1;
+                text-shadow: 0 0 20px var(--primary-glow);
+            }
+
+            100% {
+                opacity: 0.8;
+            }
+        }
+
+        /* Glitch Decoration */
+        .glitch-bar {
+            height: 2px;
+            background: var(--primary);
+            width: 100%;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            z-index: 1001;
+            opacity: 0.2;
+        }
+
+        footer {
+            margin-top: auto;
+            padding: 20px 40px;
+            font-family: 'Orbitron';
+            font-size: 10px;
+            color: #333;
+            text-align: right;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glitch-bar"></div>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <h1>Sentinel <span>Shield</span></h1>
+                <p style="font-size: 10px; color: var(--text-dim); letter-spacing: 3px;">INTERNAL NETWORK DEFENSE SYSTEM
+                    // v2.0</p>
+            </div>
+            <div id="status" class="status-badge offline">NODE: OFFLINE</div>
+        </header>
+
+        <div class="dashboard-grid">
+            <aside class="stats-sidebar">
+                <div class="card active" id="card-blocks">
+                    <h3>Threats Neutralized</h3>
+                    <div id="total-blocks" class="value">000</div>
+                </div>
+                <div class="card" id="card-warnings">
+                    <h3>Anomalous Activities</h3>
+                    <div id="active-warnings" class="value">000</div>
+                </div>
+                <div class="card">
+                    <h3>System Load</h3>
+                    <div class="value" style="font-size: 1.5rem; color: #333;">STABLE</div>
+                </div>
+            </aside>
+
+            <main class="log-section">
+                <div class="log-header">
+                    <span>> LIVE THREAT FEED</span>
+                    <span id="uptime">SESSION: 00:00:00</span>
+                </div>
+                <div id="logs" class="log-container">
+                    <div class="log-entry" style="color: #444;">[SYSTEM] Initializing defensive algorithms...</div>
+                    <div class="log-entry" style="color: #444;">[SYSTEM] Listening on port 8081 for inbound data
+                        packets...</div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <footer>
+        ENCRYPTION ACTIVE // IPSEC ENABLED // PROTOCOL 0x77-CYBER
+    </footer>
+
+    <script>
+        const socket = io('http://localhost:8081');
+        const statusEl = document.getElementById('status');
+        const logsEl = document.getElementById('logs');
+        const blocksCountEl = document.getElementById('total-blocks');
+        const warningsCountEl = document.getElementById('active-warnings');
+        const uptimeEl = document.getElementById('uptime');
+
+        let totalBlocks = 0;
+        let totalWarnings = 0;
+        let startTime = Date.now();
+
+        // Update Uptime
+        setInterval(() => {
+            const diff = Math.floor((Date.now() - startTime) / 1000);
+            const hrs = String(Math.floor(diff / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            const secs = String(diff % 60).padStart(2, '0');
+            uptimeEl.textContent = `SESSION: ${hrs}:${mins}:${secs}`;
+        }, 1000);
+
+        socket.on('connect', () => {
+            statusEl.textContent = 'NODE: ONLINE';
+            statusEl.className = 'status-badge online';
+            addLog('AUTHENTICATION SUCCESS: HANDSHAKE ESTABLISHED');
+        });
+
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'NODE: OFFLINE';
+            statusEl.className = 'status-badge offline';
+            addLog('CONNECTION LOST: RE-ESTABLISHING PROTOCOLS...', 'ban');
+        });
+
+        socket.on('attack-warning', (data) => {
+            totalWarnings++;
+            warningsCountEl.textContent = String(totalWarnings).padStart(3, '0');
+            document.getElementById('card-warnings').classList.add('pulse');
+            addLog(`THREAT DETECTED: UNUSUAL BURST FROM [${data.ip}] - COUNT: ${data.count}`, 'warning');
+        });
+
+        socket.on('ip-banned', (data) => {
+            totalBlocks++;
+            blocksCountEl.textContent = String(totalBlocks).padStart(3, '0');
+            const expiry = new Date(data.bannedUntil).toLocaleTimeString();
+            addLog(`NEUTRALIZED: HOST [${data.ip}] ISOLATED UNTIL ${expiry} (RATE LIMIT VIOLATION)`, 'ban');
+
+            // Trigger visual flash
+            document.body.style.backgroundColor = 'rgba(255, 45, 85, 0.05)';
+            setTimeout(() => document.body.style.backgroundColor = 'var(--bg)', 100);
+        });
+
+        function addLog(msg, type = '') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="timestamp">[${time}]</span> <span class="content">${msg}</span>`;
+
+            if (logsEl.children.length > 50) logsEl.removeChild(logsEl.lastChild);
+            logsEl.prepend(entry);
+        }
+    </script>
+</body>
+
+</html>
