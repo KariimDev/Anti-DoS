@@ -1,31 +1,52 @@
 const axios = require('axios');
+const readline = require('readline');
 
-// 1. TARGET: We attack the "Bouncer" (Sentinel Shield) on port 8080.
-// We do NOT attack the actual site on 3000 directly.
-const TARGET_URL = 'http://localhost:8081/heavy';
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
 
-// 2. SPEED: How many requests per second? 
-// Start with 1 to test. Change to 20 or 50 to "Attack".
-const REQUESTS_PER_SECOND = 10;
+const BASE_URL = 'http://localhost:8082';
 
-async function sendAttack() {
-    try {
-        const response = await axios.get(TARGET_URL);
-        // If the bouncer lets us through, it prints this:
-        console.log(`✅ [ALLOWED] Status: ${response.status} - The site says: "${response.data}"`);
-    } catch (error) {
-        if (error.response) {
-            // If the bouncer BLOCKS us, it sends a 429 error.
-            console.log(`❌ [BLOCKED] Status: ${error.response.status} - Message: ${error.response.data}`);
-        } else {
-            // If the Bouncer server isn't even turned on yet.
-            console.log(`🚨 [OFFLINE] Cannot reach the Bouncer. Is it running on port 8080?`);
+function startAttack(mode, rps) {
+    const endpoint = mode === 'api' ? '/api/data' : '/heavy';
+    const targetUrl = `${BASE_URL}${endpoint}`;
+
+    console.log(`
+      🚀 CYBER-ATTACK SEQUENCE INITIATED
+      ---------------------------------
+      TARGET   : ${targetUrl}
+      MODE     : ${mode.toUpperCase()}
+      RATE     : ${rps} requests/sec
+      ---------------------------------
+      Press Ctrl+C to abort...
+    `);
+
+    setInterval(async () => {
+        try {
+            const response = await axios.get(targetUrl);
+            console.log(`✅ [ALLOWED] Mode: ${mode.toUpperCase()} | Status: ${response.status} | Payload: ${JSON.stringify(response.data).substring(0, 50)}...`);
+        } catch (error) {
+            if (error.response) {
+                console.log(`❌ [BLOCKED] Mode: ${mode.toUpperCase()} | Status: ${error.response.status} | Msg: ${error.response.data.substring(0, 80)}`);
+            } else {
+                console.log(`🚨 [OFFLINE] Cannot reach the Shield on port 8081. Verify Proxy is running.`);
+            }
         }
-    }
+    }, 1000 / rps);
 }
 
-// This starts the loop
-console.log(`🚀 Starting attack on ${TARGET_URL}...`);
-console.log(`Press Ctrl+C to stop the attack.`);
+// Interactive prompt
+console.log("🛠️  SENTINEL SHIELD ATTACK SIMULATOR");
+rl.question('Select Target Mode (1: HTML/Heavy, 2: API): ', (choice) => {
+    const mode = (choice === '2') ? 'api' : 'html';
 
-setInterval(sendAttack, 1000 / REQUESTS_PER_SECOND);
+    rl.question('Enter Intensity (Requests per second, default 10): ', (rpsInput) => {
+        const rps = Number(rpsInput) || 10;
+
+        console.log(`\nConfiguring ${mode.toUpperCase()} attack at ${rps} RPS...`);
+        rl.close();
+
+        startAttack(mode, rps);
+    });
+});
