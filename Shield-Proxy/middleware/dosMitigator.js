@@ -40,6 +40,43 @@ return { allowed, tokens, retry_after }
 
 const memoryBuckets = new Map();
 
+// --- 📊 DASHBOARD ANALYTICS ENGINE ---
+let dashboardStats = {
+    rps: 0,
+    statusCodes: { '2xx': 0, '429': 0, 'other': 0 },
+    endpoints: {}
+};
+
+// 💾 Server-side Persistence
+let globalCounters = { blocks: 0, warns: 0 };
+let recentAttacks = []; // Stores last 5 { ip, fingerprint, status, lastSeen }
+
+// Periodic Stats Reset & Emission
+setInterval(() => {
+    if (global.io) {
+        // Prepare top 5 endpoints
+        const topEndpoints = Object.entries(dashboardStats.endpoints)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([path, count]) => ({ path, count }));
+
+        global.io.emit('dashboard-stats', {
+            rps: dashboardStats.rps,
+            statusCodes: { ...dashboardStats.statusCodes },
+            topEndpoints,
+            // persist data
+            globalCounters,
+            recentAttacks
+        });
+    }
+
+    // Decay/Reset for next second
+    dashboardStats.rps = 0;
+    dashboardStats.statusCodes = { '2xx': 0, '429': 0, 'other': 0 };
+    // We keep endpoints but decay them slightly or reset? Let's reset for "Real-time" feel
+    dashboardStats.endpoints = {};
+}, 1000);
+
 // Configuration from Env
 const CONFIG = {
     STD: { burst: Number(process.env.RL_CAPACITY || 20), refill: Number(process.env.RL_REFILL_RATE || 5) },
@@ -55,6 +92,18 @@ async function dosMitigator(req, res, next) {
         req.path.startsWith('/health');
 
     if (bypass) return next();
+
+    // 📊 Analytics Instrumentation
+    dashboardStats.rps++;
+    const path = req.path;
+    dashboardStats.endpoints[path] = (dashboardStats.endpoints[path] || 0) + 1;
+
+    res.on('finish', () => {
+        const code = res.statusCode;
+        if (code >= 200 && code < 300) dashboardStats.statusCodes['2xx']++;
+        else if (code === 429) dashboardStats.statusCodes['429']++;
+        else dashboardStats.statusCodes['other']++;
+    });
 
     // 🔬 Enhanced Fingerprinting (IP + UA + ACCOUNT)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -139,6 +188,8 @@ async function dosMitigator(req, res, next) {
             }
 
             if (global.io) {
+                globalCounters.blocks++;
+                updateRecentAttacks(ip, fingerprint, 'Jailed');
                 global.io.emit('ip-banned', { ip, ua, fingerprint, count: `VIOLATIONS: ${vCount}`, bannedUntil: Date.now() + (retryAfter * 1000) });
             }
             res.setHeader("Retry-After", String(retryAfter));
@@ -147,6 +198,8 @@ async function dosMitigator(req, res, next) {
 
         // 5. ALERT ON LOW TOKENS
         if (global.io && tokens < policy.burst / 5) {
+            globalCounters.warns++;
+            updateRecentAttacks(ip, fingerprint, 'Clear');
             global.io.emit('attack-warning', { ip, fingerprint, count: `[${type}] Tokens: ${tokens.toFixed(2)}` });
         }
 
@@ -176,7 +229,54 @@ async function clearJail(fingerprint) {
     } else {
         keys.forEach(k => memoryBuckets.delete(k));
     }
+
+    // Update recentAttacks to reflect the unjail
+    const entry = recentAttacks.find(a => a.fingerprint === fingerprint);
+    if (entry) {
+        entry.status = 'Clear';
+        entry.lastSeen = new Date().toLocaleTimeString();
+    }
+
+    // Notify dashboard immediately
+    if (global.io) {
+        global.io.emit('unjail-complete', { fingerprint });
+    }
+
     console.log(`🔓 [SYSTEM] Manual Jailbreak executed for: ${fingerprint}`);
+}
+
+/**
+ * Manually ban a user (Lockdown)
+ */
+async function banUser(fingerprint) {
+    const client = getRedisClient();
+    const useRedis = process.env.USE_REDIS === 'true' && client;
+    const jailKey = `jail:${fingerprint}`;
+    const permKey = `perm:${fingerprint}`; // Optional: permanent ban? Let's verify requirement.
+    // "Ban System" usually implies a long duration block. Let's use jailKey for 1 hour.
+
+    if (useRedis) {
+        await client.set(jailKey, '1', { EX: 3600 });
+    } else {
+        memoryBuckets.set(jailKey, Date.now() + 3600000);
+    }
+
+    // Update global counters and lists
+    if (global.io) {
+        globalCounters.blocks++;
+        // Update persistence list
+        recentAttacks = recentAttacks.filter(a => a.fingerprint !== fingerprint);
+        // We don't have IP here easily unless passed, but we can try to find it in recentAttacks or just set unknown
+        // For now, let's assume the frontend passes IP or we update status if exists.
+        const existing = recentAttacks.find(a => a.fingerprint === fingerprint);
+        const ip = existing ? existing.ip : 'MANUAL-BAN';
+
+        recentAttacks.unshift({ ip, fingerprint, status: 'Jailed', lastSeen: new Date().toLocaleTimeString() });
+        if (recentAttacks.length > 5) recentAttacks.pop();
+
+        global.io.emit('ip-banned', { ip, ua: 'Manual Ban', fingerprint, count: 'MANUAL LOCKDOWN', bannedUntil: Date.now() + 3600000 });
+    }
+    console.log(`⛔ [SYSTEM] Manual Ban executed for: ${fingerprint}`);
 }
 
 /**
@@ -195,8 +295,19 @@ function updateConfig(newConfig) {
 }
 
 function shieldResponse(res, code, msg, ip, ua, fingerprint) {
-    if (global.io) global.io.emit('ip-banned', { ip, ua, fingerprint, count: msg, bannedUntil: 'LOCKDOWN' });
+    if (global.io) {
+        globalCounters.blocks++;
+        updateRecentAttacks(ip, fingerprint, 'Jailed');
+        global.io.emit('ip-banned', { ip, ua, fingerprint, count: msg, bannedUntil: 'LOCKDOWN' });
+    }
     return res.status(code).send(msg);
 }
 
-module.exports = { dosMitigator, clearJail, updateConfig, CONFIG };
+function updateRecentAttacks(ip, fingerprint, status) {
+    // Remove if exists to bubble up
+    recentAttacks = recentAttacks.filter(a => a.fingerprint !== fingerprint);
+    recentAttacks.unshift({ ip, fingerprint, status, lastSeen: new Date().toLocaleTimeString() });
+    if (recentAttacks.length > 5) recentAttacks.pop();
+}
+
+module.exports = { dosMitigator, clearJail, banUser, updateConfig, CONFIG };

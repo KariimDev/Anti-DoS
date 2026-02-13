@@ -7,18 +7,19 @@ services:
       - "6379"
 
   shield:
-    build: ./Shield-Proxy
+    build: 
+      context: ./Shield-Proxy
     container_name: sentinel-shield
     restart: always
     depends_on:
       - redis
     ports:
-      - "${SHIELD_PORT:-80}:${SHIELD_PORT:-80}"
+      - "8888:8888"
     environment:
-      - SHIELD_PORT=${SHIELD_PORT:-80}
-      - BACKEND_URL=${BACKEND_URL:-http://host.docker.internal:3000}
+      - SHIELD_PORT=8888
+      - BACKEND_URL=http://host.docker.internal:4000
       - USE_REDIS=true
       - REDIS_URL=redis://redis:6379
-      - ADMIN_KEY=${ADMIN_KEY:-changeme}
+      - ADMIN_KEY=taki
     extra_hosts:
       - "host.docker.internal:host-gateway"

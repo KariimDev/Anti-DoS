@@ -3,7 +3,7 @@
 try { require('dotenv').config(); } catch (e) { /* dotenv optional */ }
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const { dosMitigator, clearJail, updateConfig, CONFIG } = require('./middleware/dosMitigator');
+const { dosMitigator, clearJail, banUser, updateConfig, CONFIG } = require('./middleware/dosMitigator');
 const { initRedis } = require('./lib/redisClient');
 const cors = require('cors');
 const path = require('path');
@@ -71,6 +71,16 @@ global.io = io;
 
 io.on('connection', (socket) => {
     // console.log('📊 Dashboard connected');
+    socket.on('manual-ban', async (data) => {
+        if (data && data.fingerprint) {
+            await banUser(data.fingerprint);
+        }
+    });
+    socket.on('manual-unjail', async (data) => {
+        if (data && data.fingerprint) {
+            await clearJail(data.fingerprint);
+        }
+    });
 });
 
 console.log(`🛡️ Sentinel Shield starting...`);
