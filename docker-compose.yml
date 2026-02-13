@@ -3,7 +3,6 @@ services:
     image: redis:alpine
     container_name: sentinel-redis
     restart: always
-    # Expose internally. If you need external access, use ports: - "6379:6379"
     expose:
       - "6379"
 
@@ -14,12 +13,12 @@ services:
     depends_on:
       - redis
     ports:
-      - "8081:8081"
+      - "${SHIELD_PORT:-80}:${SHIELD_PORT:-80}"
     environment:
-      - SHIELD_PORT=8081
-      - BACKEND_URL=${BACKEND_URL:-http://host.docker.internal:4000}
+      - SHIELD_PORT=${SHIELD_PORT:-80}
+      - BACKEND_URL=${BACKEND_URL:-http://host.docker.internal:3000}
       - USE_REDIS=true
       - REDIS_URL=redis://redis:6379
-      - ADMIN_KEY=${ADMIN_KEY:-1234}
+      - ADMIN_KEY=${ADMIN_KEY:-changeme}
     extra_hosts:
       - "host.docker.internal:host-gateway"

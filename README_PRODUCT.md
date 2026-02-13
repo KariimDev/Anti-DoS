@@ -1,61 +1,86 @@
 # 🛡️ Sentinel Shield Enterprise v2.5
 
-Sentinel Shield is a high-performance, standalone security appliance designed to provide immediate protection for any web application (e.g., `unsecure.com`). It combines atomic Token Bucket rate limiting with real-time HUD forensics and multi-tier IP isolation.
+Sentinel Shield is a high-performance, standalone security appliance that provides instant DDoS/DoS protection for **any web server**. It sits in front of your application as a reverse proxy, filtering malicious traffic before it ever reaches your server.
 
 ---
 
-## 🚀 Professional Integration Options
+## 🚀 Quick Start (Any Server)
 
-You can integrate Sentinel Shield into your infrastructure in two ways, depending on your architecture:
+### Prerequisites
+- A Linux server with [Docker](https://docs.docker.com/get-docker/) installed
+- Your existing app/website already running on some port
 
-### 🏥 Path A: The "Protective Wall" (Zero Code Change)
-**Recommended for: Legacy Apps, Third-Party Sites, or Highest Security.**
-In this mode, the Shield acts as a "Bouncer" at the front door. 
-
-1.  **Traffic Flow**: Internet ➔ Sentinel Shield (Port 80) ➔ Your App (Port 4000).
-2.  **Implementation**: 
-    - Deploy using `docker-compose up`.
-    - Point `BACKEND_URL` in `.env` to your application's internal address.
-3.  **Benefit**: You don't have to touch a single line of your existing code. The Shield stops threats before they even reach your server.
-
-### 💉 Path B: The "Embedded Guard" (Direct Middleware)
-**Recommended for: Cloud-Native Apps or Minimal Infrastructure.**
-If you prefer not to run a separate proxy, you can embed the security core directly.
-
-1.  **Implementation**: Copy `Shield-Proxy/middleware/dosMitigator.js` into your project.
-2.  **Integration**: Import it as a standard Express middleware: `app.use(dosMitigator)`.
-3.  **Benefit**: Lower latency and fewer moving parts, though it requires access to your source code.
-
----
-
-## 📦 Deployment Instructions
-
-### 1. Simple Setup (Terminal)
-Ensure Docker is installed, then run our automated deployment script:
+### One-Command Deployment
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-### 2. Manual Configuration
-1.  Copy `.env.example` to `.env`.
-2.  Set `ADMIN_KEY` (Your Dashboard Password).
-3.  Set `BACKEND_URL` to your site's target port.
-4.  Run `docker-compose up -d`.
+The installer will ask you 3 questions:
+1. **What port is your server running on?** — e.g. `3000`, `4000`, `8080`
+2. **What port should Sentinel Shield listen on?** — e.g. `80`, `8081` (clients connect here)
+3. **Choose a dashboard secret key** — used to access the live monitoring HUD
 
-### 📊 Monitoring
-Your live Command & Control HUD is available at:
-`http://your-server-ip/sentinel`
+That's it. Sentinel Shield will build, deploy, and start protecting your server automatically.
 
 ---
 
-## 🛠️ Technical Support & Enterprise Licensing
+## 🏗️ How It Works
 
-For implementation assistance, custom security policies, or enterprise support plans, please contact our security team:
+```
+Internet Traffic
+       │
+       ▼
+┌──────────────────┐
+│  Sentinel Shield │  ← Filters DDoS/DoS attacks
+│   (port 80)      │
+└────────┬─────────┘
+         │ Clean traffic only
+         ▼
+┌──────────────────┐
+│   Your Server    │  ← Never sees malicious requests
+│  (port 3000)     │
+└──────────────────┘
+```
 
-- **Deployment Support**: support@sentinel-defense.com
-- **Emergency Incident Response**: 24/7 Priority Hotline
-- **Custom Policy Development**: Consulting available for high-traffic endpoints.
+- **Token Bucket rate limiting** with atomic Redis execution
+- **Multi-tier IP isolation**: Warning → Jail → Permanent Ban
+- **Fingerprint forensics** combining IP + User-Agent + Auth
+- **Real-time HUD dashboard** with live threat feed and charts
 
 ---
+
+## 📊 Dashboard
+
+After deployment, access your Command & Control HUD at:
+```
+http://YOUR-SERVER-IP:SHIELD_PORT/sentinel
+```
+Enter the admin key you chose during setup to unlock the dashboard.
+
+---
+
+## 🛠️ Manual Configuration
+
+If you prefer not to use `setup.sh`, you can manually configure:
+
+1. Copy `.env.example` to `.env`
+2. Edit the values:
+   - `TARGET_PORT` — port of the server to protect
+   - `SHIELD_PORT` — port for the Shield proxy
+   - `ADMIN_KEY` — your dashboard password
+3. Run `docker compose up -d`
+
+---
+
+## ⚙️ Advanced: Embedded Mode (No Docker)
+
+If you prefer not to run a separate proxy, embed the security core directly into your Express app:
+
+1. Copy `Shield-Proxy/middleware/dosMitigator.js` into your project
+2. Import it: `app.use(dosMitigator)`
+3. No Docker required — lower latency, but requires source code access
+
+---
+
 © 2026 Sentinel Defense Industries • [SECURITY STATUS: ACTIVE]

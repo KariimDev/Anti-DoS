@@ -1,5 +1,6 @@
 // Shield-Proxy/index.js
-require('dotenv').config({ path: '../.env' });
+// In Docker: env vars come from docker-compose. In local dev: load from .env if present.
+try { require('dotenv').config(); } catch (e) { /* dotenv optional */ }
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { dosMitigator, clearJail, updateConfig, CONFIG } = require('./middleware/dosMitigator');
@@ -7,7 +8,8 @@ const { initRedis } = require('./lib/redisClient');
 const cors = require('cors');
 const path = require('path');
 
-initRedis();
+// Init Redis (non-blocking — server starts even if Redis is slow)
+initRedis().catch(err => console.error('[Sentinel] Redis init warning:', err.message));
 
 const http = require('http');
 const socketIo = require('socket.io');
@@ -118,6 +120,7 @@ app.use('/', createProxyMiddleware({
     }
 }));
 
-server.listen(SHIELD_PORT, () => {
-    console.log(`✅ Sentinel Shield is active at http://localhost:${SHIELD_PORT}`);
+server.listen(SHIELD_PORT, '0.0.0.0', () => {
+    console.log(`✅ Sentinel Shield is active at http://0.0.0.0:${SHIELD_PORT} (Internal)`);
+    console.log(`🛡️  External access via host port mapping configured in docker-compose.`);
 });

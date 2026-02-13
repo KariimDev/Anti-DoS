@@ -6,7 +6,7 @@ const rl = readline.createInterface({
     output: process.stdout
 });
 
-const BASE_URL = 'http://localhost:8081';
+const BASE_URL = 'http://10.42.0.1:8080';
 
 function startAttack(mode, rps) {
     const endpoint = mode === 'api' ? '/api/data' : '/heavy';
