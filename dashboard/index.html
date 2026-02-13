@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SENTINEL // ADVANCED DEFENSE v2.5</title>
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap"
         rel="stylesheet">
@@ -32,6 +33,41 @@
 
             to {
                 transform: translateY(100%);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                text-shadow: 0 0 10px var(--primary-glow);
+            }
+
+            50% {
+                opacity: 0.6;
+                text-shadow: 0 0 20px var(--primary);
+            }
+
+            100% {
+                opacity: 1;
+                text-shadow: 0 0 10px var(--primary-glow);
+            }
+        }
+
+        .pulse-text {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes bar-pulse {
+            0% {
+                box-shadow: 0 0 5px var(--danger);
+            }
+
+            50% {
+                box-shadow: 0 0 20px var(--danger);
+            }
+
+            100% {
+                box-shadow: 0 0 5px var(--danger);
             }
         }
 
@@ -446,7 +482,7 @@
     <div class="container">
         <header>
             <div class="logo-group">
-                <h1>SENTINEL // <span>SHIELD</span></h1>
+                <h1 class="pulse-text">SENTINEL // <span>SHIELD</span></h1>
                 <p>Advanced DoS Mitigation Intelligence • v2.5 Enterprise</p>
             </div>
             <div class="sys-info">
@@ -520,11 +556,19 @@
                 </div>
             </section>
 
-            <!-- Center: Live Feed -->
+            <!-- Center: Live Feed & Graph -->
             <section class="panel">
-                <div class="panel-header">LIVE THREAT ANALYTICS <span>AUTO-SCROLL ON</span></div>
+                <div class="panel-header">NETWORK THREAT INTENSITY <span>[LIVE TELEMETRY]</span></div>
+                <div style="padding: 15px; height: 180px;">
+                    <canvas id="threatChart"></canvas>
+                </div>
+
+                <div class="panel-header" style="border-top: 1px solid var(--surface-accent);">LIVE THREAT ANALYTICS
+                    <span>AUTO-SCROLL ON</span>
+                </div>
                 <div id="feed" class="feed-container">
-                    <div class="feed-entry system">Establishing secure handshake with Sentinel Engine...</div>
+                    <div class="feed-entry system pulse-text">Establishing secure handshake with Sentinel Engine...
+                    </div>
                 </div>
             </section>
 
@@ -537,9 +581,9 @@
                 <div style="margin-top: auto; padding: 15px; border-top: 1px solid var(--surface-accent);">
                     <div class="panel-header" style="background: transparent; padding: 0; margin-bottom: 10px;">THREAT
                         PROXIMITY</div>
-                    <div style="height: 4px; background: #111; position: relative;">
+                    <div style="height: 6px; background: #111; position: relative; border: 1px solid #222;">
                         <div id="threat-bar"
-                            style="position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: var(--danger); transition: width 0.5s;">
+                            style="position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: var(--danger); transition: width 0.5s; animation: bar-pulse 2s infinite;">
                         </div>
                     </div>
                 </div>
@@ -595,6 +639,46 @@
         let stats = { blocks: 0, warns: 0, startTime: Date.now() };
         let activeFingerprints = new Map();
 
+        // --- 📊 CHART INITIALIZATION ---
+        let threatLevelHistory = new Array(30).fill(0);
+        const ctx = document.getElementById('threatChart').getContext('2d');
+        const threatChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: new Array(30).fill(''),
+                datasets: [{
+                    label: 'THREAT INTENSITY',
+                    data: threatLevelHistory,
+                    borderColor: '#ff2d55',
+                    backgroundColor: 'rgba(255, 45, 85, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, display: false },
+                    x: { display: false }
+                },
+                plugins: {
+                    legend: { display: false }
+                },
+                animation: { duration: 0 }
+            }
+        });
+
+        let currentSecondThreats = 0;
+        setInterval(() => {
+            threatLevelHistory.push(currentSecondThreats);
+            threatLevelHistory.shift();
+            threatChart.update();
+            currentSecondThreats = Math.max(0, currentSecondThreats - 1); // Decay
+        }, 1000);
+
         // Config Elements
         const stdBurstInp = document.getElementById('std-burst');
         const stdRefillInp = document.getElementById('std-refill');
@@ -630,6 +714,7 @@
 
         socket.on('attack-warning', (data) => {
             stats.warns++;
+            currentSecondThreats += 2;
             warnCountEl.textContent = String(stats.warns).padStart(4, '0');
             updateIntegrity();
             addFeed(`[ANOMALY] ${data.ip} triggered warning: ${data.count}`, 'warn');
@@ -639,6 +724,7 @@
 
         socket.on('ip-banned', (data) => {
             stats.blocks++;
+            currentSecondThreats += 5;
             blockCountEl.textContent = String(stats.blocks).padStart(4, '0');
             updateIntegrity();
 
@@ -647,6 +733,7 @@
                 : data.bannedUntil;
 
             addFeed(`[NEUTRALIZED] ${data.ip} - Policy violation. Jail until: ${expiry}`, 'block');
+            flashRed();
 
             // Update Fingerprint List
             updateFingerprint(data.ip, data.fingerprint, 'Jailed');
@@ -759,21 +846,22 @@
         }
 
         function updateIntegrity() {
-            const ratio = 100 - ((stats.blocks * 2) / (stats.blocks + 100) * 100);
-            integrityEl.textContent = `${Math.max(0, Math.floor(ratio))}%`;
-            if (ratio < 50) integrityEl.style.color = 'var(--danger)';
-            else if (ratio < 80) integrityEl.style.color = 'var(--warning)';
-            else integrityEl.style.color = 'var(--success)';
+            const total = stats.blocks + stats.warns;
+            const integrity = Math.max(0, 100 - (total * 0.1));
+            integrityEl.textContent = `${integrity.toFixed(1)}%`;
+            if (integrity < 98) integrityEl.style.color = 'var(--warning)';
+            if (integrity < 90) integrityEl.style.color = 'var(--danger)';
         }
 
         function updateThreatBar() {
-            const width = Math.min(100, stats.blocks * 5);
-            threatBar.style.width = `${width}%`;
+            const level = Math.min(100, stats.blocks * 5);
+            threatBar.style.width = `${level}%`;
+            if (level > 70) threatBar.style.background = 'var(--danger)';
         }
 
         function flashRed() {
-            document.body.style.boxShadow = 'inset 0 0 50px rgba(255, 45, 85, 0.1)';
-            setTimeout(() => document.body.style.boxShadow = 'none', 200);
+            document.body.style.boxShadow = "inset 0 0 100px rgba(255, 45, 85, 0.3)";
+            setTimeout(() => { document.body.style.boxShadow = "none"; }, 300);
         }
     </script>
 </body>
