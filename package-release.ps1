@@ -10,6 +10,8 @@ $includeFiles = @(
     "dashboard\*",
     "docker-compose.yml",
     ".env.example",
+    "setup.sh",
+    "README_PRODUCT.md",
     "RELEASE_GUIDE.md"
 )
 
@@ -22,7 +24,12 @@ New-Item -ItemType Directory -Path $stage
 Copy-Item "Shield-Proxy" "$stage\" -Recurse -Exclude "node_modules"
 Copy-Item "dashboard" "$stage\" -Recurse
 Copy-Item "docker-compose.yml" "$stage\"
+Copy-Item "setup.sh" "$stage\"
+Copy-Item "README_PRODUCT.md" "$stage\README.md"
 Copy-Item ".env" "$stage\.env.example"
+
+# 4.5 Sanitize .env.example
+(Get-Content "$stage\.env.example") -replace 'ADMIN_KEY=.*', 'ADMIN_KEY=YOUR_SECURE_KEY_HERE' | Out-File "$stage\.env.example" -Encoding UTF8
 
 # 5. Create the ZIP
 Compress-Archive -Path "$stage\*" -DestinationPath $releaseName

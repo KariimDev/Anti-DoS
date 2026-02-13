@@ -76,13 +76,23 @@ async function dosMitigator(req, res, next) {
 
         // 2. CHECK ISOLATION (Short-circuit)
         if (useRedis) {
-            const [perm, jail] = await Promise.all([client.get(permKey), client.get(jailKey)]);
+            const [perm, jail, ttl] = await Promise.all([
+                client.get(permKey),
+                client.get(jailKey),
+                client.ttl(jailKey)
+            ]);
             if (perm) return shieldResponse(res, 403, "PERMANENT ACCESS REVOKED", ip, ua, fingerprint);
-            if (jail) return shieldResponse(res, 403, "TEMPORARY ISOLATION (1 HR)", ip, ua, fingerprint);
+            if (jail) {
+                const mins = Math.ceil(ttl / 60);
+                return shieldResponse(res, 403, `TEMPORARY ISOLATION: ${mins} mins remaining`, ip, ua, fingerprint);
+            }
         } else {
             if (memoryBuckets.get(permKey)) return shieldResponse(res, 403, "PERMANENT ACCESS REVOKED", ip, ua, fingerprint);
             const jailTime = memoryBuckets.get(jailKey);
-            if (jailTime && Date.now() < jailTime) return shieldResponse(res, 403, "TEMPORARY ISOLATION (1 HR)", ip, ua, fingerprint);
+            if (jailTime && Date.now() < jailTime) {
+                const mins = Math.ceil((jailTime - Date.now()) / 60000);
+                return shieldResponse(res, 403, `TEMPORARY ISOLATION: ${mins} mins remaining`, ip, ua, fingerprint);
+            }
         }
 
         // 3. EXECUTE TOKEN BUCKET
