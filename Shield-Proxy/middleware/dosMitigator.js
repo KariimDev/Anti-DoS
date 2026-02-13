@@ -50,9 +50,15 @@ const CONFIG = {
 async function dosMitigator(req, res, next) {
     if (req.path.startsWith('/socket.io/')) return next();
 
-    const ip = req.ip || req.connection.remoteAddress;
+    // 🔬 Enhanced Fingerprinting (IP + UA + ACCOUNT)
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const ua = req.headers['user-agent'] || 'unknown';
-    const fingerprint = crypto.createHash('md5').update(`${ip}-${ua}`).digest('hex');
+    const auth = req.headers['authorization'] || 'public'; // The "Driver's License"
+
+    // Create a secure hash to avoid leaking raw IP/Tokens in logs
+    const fingerprint = crypto.createHash('md5')
+        .update(`${ip}-${ua}-${auth}`)
+        .digest('hex');
 
     // 1. Identify Target Policy
     const isApi = req.path.startsWith('/api/');

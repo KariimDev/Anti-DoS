@@ -13,9 +13,24 @@ const http = require('http');
 const socketIo = require('socket.io');
 
 const app = express();
+const crypto = require('crypto');
 
 // 1. Serve Dashboard Files
 app.use('/sentinel', express.static(path.join(__dirname, '../dashboard')));
+
+// Health Check API (Enterprise Requirement)
+app.get('/health', (req, res) => {
+    const { getRedisClient } = require('./lib/redisClient');
+    const client = getRedisClient();
+    res.json({
+        status: 'online',
+        timestamp: new Date().toISOString(),
+        engine: 'Sentinel Shield v2.5',
+        environment: process.env.NODE_ENV || 'production',
+        redis: client?.isOpen ? 'connected' : 'disconnected',
+        uptime: process.uptime()
+    });
+});
 
 // 2. Admin Auth Middleware
 const ADMIN_KEY = process.env.ADMIN_KEY || 'SENTINEL-ROOT';
@@ -24,6 +39,7 @@ const authMiddleware = (req, res, next) => {
     if (key === ADMIN_KEY) return next();
     res.status(401).json({ status: 'error', message: 'UNAUTHORIZED ACCESS BLOCKED' });
 };
+
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
@@ -32,19 +48,19 @@ const io = socketIo(server, {
     }
 });
 
-// Priority: port in .env, then 8080 (matching attacker script), then 3000
-const SHIELD_PORT = process.env.SHIELD_PORT || 8080;
+// Priority: port in .env, then 8081, then fallback
+const SHIELD_PORT = process.env.SHIELD_PORT || 8081;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
-// Global io instance for middleware
+// Global io instance for middleware HUD updates
 global.io = io;
 
 io.on('connection', (socket) => {
-    console.log('📊 Dashboard connected');
+    // console.log('📊 Dashboard connected');
 });
 
 console.log(`🛡️ Sentinel Shield starting...`);
-console.log(`Forwarding requests from :${SHIELD_PORT} to ${BACKEND_URL}`);
+console.log(`Forwarding requests from :${SHIELD_PORT} ➔ ${BACKEND_URL}`);
 
 // App-level middleware
 app.use(cors());
@@ -70,21 +86,15 @@ app.post('/api/unjail', authMiddleware, async (req, res) => {
     res.json({ status: "success", message: `Subject freed successfully.` });
 });
 
-// Apply DoS Mitigation Middleware
+// 🛡️ Apply Sentinel DoS Mitigation
 app.use(dosMitigator);
 
-// Proxy configuration
+// ⚡ Reverse Proxy Engine
 app.use('/', createProxyMiddleware({
     target: BACKEND_URL,
     changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        // console.log(`[PROXY] Forwarding: ${req.method} ${req.url}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        console.log(`[PROXY] Backend returned: ${proxyRes.statusCode}`);
-    },
     onError: (err, req, res) => {
-        console.error(`[PROXY] Error reaching backend: ${err.message}`);
+        console.error(`[PROXY] Gateway Error: ${err.message}`);
         res.status(502).send('Gateway Error: Backend is unreachable.');
     }
 }));
