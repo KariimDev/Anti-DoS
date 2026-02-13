@@ -16,7 +16,19 @@ const app = express();
 const crypto = require('crypto');
 
 // 1. Serve Dashboard Files
-app.use('/sentinel', express.static(path.join(__dirname, '../dashboard')));
+const dashboardPath = path.join(__dirname, 'dashboard');
+app.use('/sentinel', express.static(dashboardPath));
+
+// Failsafe: Catch any /sentinel sub-routes and serve index.html (SPA logic)
+app.get(['/sentinel', '/sentinel/*'], (req, res) => {
+    const target = path.join(dashboardPath, 'index.html');
+    res.sendFile(target, (err) => {
+        if (err) {
+            console.error(`🔴 [SENTINEL] Dashboard load failed: ${err.message}`);
+            res.status(500).send("Security HUD Internal Error: Dashboard files missing in container.");
+        }
+    });
+});
 
 // Health Check API (Enterprise Requirement)
 app.get('/health', (req, res) => {
@@ -89,10 +101,17 @@ app.post('/api/unjail', authMiddleware, async (req, res) => {
 // 🛡️ Apply Sentinel DoS Mitigation
 app.use(dosMitigator);
 
-// ⚡ Reverse Proxy Engine
+// ⚡ Reverse Proxy Engine (Strictly filter out internal routes)
 app.use('/', createProxyMiddleware({
     target: BACKEND_URL,
     changeOrigin: true,
+    // EXCEPTION: Never proxy these routes
+    filter: (pathname, req) => {
+        const isInternal = pathname.startsWith('/sentinel') ||
+            pathname.startsWith('/api/') ||
+            pathname.startsWith('/health');
+        return !isInternal;
+    },
     onError: (err, req, res) => {
         console.error(`[PROXY] Gateway Error: ${err.message}`);
         res.status(502).send('Gateway Error: Backend is unreachable.');

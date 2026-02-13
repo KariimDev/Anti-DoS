@@ -48,7 +48,13 @@ const CONFIG = {
 };
 
 async function dosMitigator(req, res, next) {
-    if (req.path.startsWith('/socket.io/')) return next();
+    // 🚪 BYPASS: Do not rate-limit the Dashboard or internal APIs
+    const bypass = req.path.startsWith('/socket.io/') ||
+        req.path.startsWith('/sentinel') ||
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/health');
+
+    if (bypass) return next();
 
     // 🔬 Enhanced Fingerprinting (IP + UA + ACCOUNT)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;

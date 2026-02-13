@@ -1,21 +1,11 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:alpine
     container_name: sentinel-redis
     restart: always
-    ports:
-      - "6379:6379"
-
-  backend:
-    build: ./Backend-app
-    container_name: sentinel-backend
-    restart: always
-    environment:
-      - PORT=4000
+    # Expose internally. If you need external access, use ports: - "6379:6379"
     expose:
-      - "4000"
+      - "6379"
 
   shield:
     build: ./Shield-Proxy
@@ -23,12 +13,13 @@ services:
     restart: always
     depends_on:
       - redis
-      - backend
     ports:
       - "8081:8081"
     environment:
       - SHIELD_PORT=8081
-      - BACKEND_URL=http://backend:4000
+      - BACKEND_URL=${BACKEND_URL:-http://host.docker.internal:4000}
       - USE_REDIS=true
       - REDIS_URL=redis://redis:6379
-      - ADMIN_KEY=1234
+      - ADMIN_KEY=${ADMIN_KEY:-1234}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,13 +1,19 @@
 # Sentinel Shield Packaging Script (Windows PowerShell)
-$releaseName = "Sentinel_Shield_Release.zip"
+$releaseName = "Sentinel_Shield_Pro.zip"
 
-# 1. Cleanup old release
-if (Test-Path $releaseName) { Remove-Item $releaseName }
+# 1. Cleanup old release with retry logic
+if (Test-Path $releaseName) { 
+    try {
+        Remove-Item $releaseName -Force -ErrorAction Stop
+    } catch {
+        $releaseName = "Sentinel_Shield_v" + (Get-Date -Format "yyyyMMdd_HHmm") + ".zip"
+        Write-Host "⚠️ Warning: Original ZIP locked. Creating unique version: $releaseName" -ForegroundColor Yellow
+    }
+}
 
 # 2. Define files to include
 $includeFiles = @(
     "Shield-Proxy\*",
-    "dashboard\*",
     "docker-compose.yml",
     ".env.example",
     "setup.sh",
@@ -22,7 +28,6 @@ New-Item -ItemType Directory -Path $stage
 
 # 4. Copy current project files (excluding node_modules)
 Copy-Item "Shield-Proxy" "$stage\" -Recurse -Exclude "node_modules"
-Copy-Item "dashboard" "$stage\" -Recurse
 Copy-Item "docker-compose.yml" "$stage\"
 Copy-Item "setup.sh" "$stage\"
 Copy-Item "README_PRODUCT.md" "$stage\README.md"
